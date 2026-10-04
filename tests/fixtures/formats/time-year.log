@@ -1,0 +1,3 @@
+2024-01-02 03:04:05.678 D/MyTag   ( 1234): hello world
+2024-01-02 03:04:05.679 I/ActivityManager( 1234): Start proc
+2024-01-02 03:04:05.700 W/OkHttp  ( 4321): slow response

@@ -1,0 +1,4 @@
+01-02 03:04:05.678 D/MyTag   ( 1234): hello world
+01-02 03:04:05.679 I/ActivityManager( 1234): Start proc 4321:com.example.app/u0a123 for activity
+01-02 03:04:05.700 W/OkHttp  ( 4321): slow response
+01-02 03:04:05.701 E/AndroidRuntime( 4321): FATAL EXCEPTION: main

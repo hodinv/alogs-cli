@@ -1,0 +1,6 @@
+2024-01-02 03:04:05.678  1234-5678  MyTag                   com.example.app                      D  hello world
+2024-01-02 03:04:05.679  1234-1234  ActivityManager         system_process                       I  Start proc 4321:com.example.app/u0a123 for activity
+2024-01-02 03:04:05.700  4321-4321  OkHttp                  com.example.app                      W  slow response
+2024-01-02 03:04:05.701  4321-4321  AndroidRuntime          com.example.app                      E  FATAL EXCEPTION: main
+                                                                                                    java.lang.IllegalStateException: boom
+2024-01-02 03:04:05.702   567-890   My Tag                  pid-567                              V  spaced tag

@@ -1,0 +1,4 @@
+D( 1234: 5678) hello world
+I( 1234: 1234) Start proc 4321:com.example.app/u0a123 for activity
+W( 4321: 4321) slow response
+E( 4321: 4321) FATAL EXCEPTION: main

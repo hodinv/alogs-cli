@@ -1,0 +1,30 @@
+========================================================
+== dumpstate: 2024-01-02 03:10:00
+========================================================
+
+Build: UP1A.231005.007
+Build fingerprint: 'google/oriole/oriole:14/UP1A.231005.007/10754064:user/release-keys'
+Bootloader: slider-1.3-10780582
+Radio: g5123b-123456-231004-B-10972385
+Network: T-Mobile
+Kernel: Linux version 5.10.177-android13
+Command line: console=null
+Uptime: up 2 days, 3:04
+
+------ SYSTEM LOG (logcat -v threadtime -v printable -v uid -d *:v) ------
+--------- beginning of main
+01-02 03:04:05.678  1000  1234  5678 D MyTag   : hello world
+01-02 03:04:05.679  1000  1234  1234 I ActivityManager: Start proc 4321:com.example.app/u0a123 for activity
+01-02 03:04:05.700 10123  4321  4321 W OkHttp  : slow response
+01-02 03:04:05.701 10123  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main
+01-02 03:04:05.702 10123  4321  4321 E AndroidRuntime: java.lang.IllegalStateException: boom
+01-02 03:04:05.703  1000  1234  1300 I ActivityManager: Process com.example.app (pid 4321) has died
+01-02 03:04:05.704  1000  1234  1300 W ActivityManager: Force finishing activity
+01-02 03:04:05.705     0     1     1 I init    : Service 'bootanim' exited
+01-02 03:04:05.706  1000  1234  1300 D WindowManager: relayout
+01-02 03:04:05.707  1000  1234  1300 D WindowManager: relayout done
+01-02 03:04:05.708  1000  1234  1300 D WindowManager: focus changed
+01-02 03:04:05.709  1000  1234  1300 D WindowManager: focus changed again
+01-02 03:04:05.710  1000  1234  1300 V WindowManager: verbose stuff
+01-02 03:04:05.711  1000  1234  1300 V WindowManager: more verbose stuff
+------ 0.120s was the duration of 'SYSTEM LOG' ------

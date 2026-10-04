@@ -1,0 +1,83 @@
+/* Zone proportions from docs/02-ui-layout.md */
+
+#main {
+    height: 1fr;
+}
+
+#left {
+    width: 70%;
+}
+
+#filters {
+    width: 30%;
+}
+
+#log {
+    height: 1fr;
+    border: round $primary 50%;
+}
+
+#log:focus {
+    border: round $accent;
+}
+
+#command-panel {
+    height: auto;
+}
+
+#output {
+    height: 7;
+    border: round $primary 50%;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+}
+
+#active-filters {
+    height: 40%;
+    border: round $secondary;
+    padding: 0 1;
+}
+
+#available-tags {
+    height: 60%;
+    border: round $secondary;
+    padding: 0 1;
+}
+
+#active-summary {
+    height: auto;
+}
+
+TagList {
+    height: 1fr;
+    border: none;
+    padding: 0;
+    background: transparent;
+}
+
+TagList:focus {
+    border: none;
+}
+
+#selected-tags {
+    margin-top: 1;
+}
+
+#tag-search {
+    height: 1;
+    border: none;
+    padding: 0 1;
+    margin-bottom: 1;
+    background: $boost;
+}
+
+#tags-hint {
+    height: auto;
+}
+
+#status {
+    height: 1;
+    background: $panel;
+    color: $text-muted;
+    padding: 0 1;
+}

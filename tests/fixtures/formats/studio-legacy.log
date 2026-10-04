@@ -1,0 +1,4 @@
+2024-01-02 03:04:05.678 1234-5678/com.example.app D/MyTag: hello world
+2024-01-02 03:04:05.679 1234-1234/system_process I/ActivityManager: Start proc 4321:com.example.app/u0a123 for activity
+2024-01-02 03:04:05.700 4321-4321/com.example.app W/OkHttp: slow response
+2024-01-02 03:04:05.701 4321-4321/? E/AndroidRuntime: FATAL EXCEPTION: main

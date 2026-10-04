@@ -1,0 +1,4 @@
+01-02 03:04:05.678 u0_a123  1234  5678 D MyTag   : hello world
+01-02 03:04:05.679  system  1234  1234 I ActivityManager: Start proc
+01-02 03:04:05.700   10123  4321  4321 W OkHttp  : slow response
+01-02 03:04:05.701    root   567   567 E init    : something failed

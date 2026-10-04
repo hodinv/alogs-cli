@@ -1,0 +1,12 @@
+--------- beginning of main
+01-02 03:04:05.678  1234  5678 D MyTag   : hello world
+01-02 03:04:05.679  1234  1234 I ActivityManager: Start proc 4321:com.example.app/u0a123 for activity {com.example.app/.MainActivity}
+01-02 03:04:05.700  4321  4321 W OkHttp  : slow response: 2034 ms
+01-02 03:04:05.701  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main
+01-02 03:04:05.701  4321  4321 E AndroidRuntime: java.lang.IllegalStateException: boom
+	at com.example.Foo.bar(Foo.kt:12)
+	at com.example.Foo.main(Foo.kt:3)
+01-02 03:04:05.702   567   890 V chromium: [INFO:foo.cc(12)] value: 3
+--------- beginning of system
+01-02 03:04:05.800  1000  1010 I My Tag With Spaces: spaced tag
+01-02 03:04:05.801  1000  1010 D EmptyMsg:

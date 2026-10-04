@@ -1,0 +1,53 @@
+[project]
+name = "alog-cli"
+dynamic = ["version"]
+description = "Console analyzer for Android logs (logcat files and live adb)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+keywords = ["android", "logcat", "adb", "log", "tui", "terminal"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: System :: Logging",
+]
+dependencies = [
+    "textual>=1.0",
+    "platformdirs>=4",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+alogs = "alogs.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+build = [
+    "pyinstaller>=6",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "alogs/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["alogs"]
+
+[tool.hatch.build.targets.sdist]
+include = ["alogs", "tests", "docs", "scripts", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

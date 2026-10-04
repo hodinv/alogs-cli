@@ -1,0 +1,4 @@
+D( 1234) hello world  (MyTag)
+I( 1234) Start proc 4321:com.example.app/u0a123 for activity  (ActivityManager)
+W( 4321) slow response (retrying)  (OkHttp)
+E( 4321) FATAL EXCEPTION: main  (AndroidRuntime)

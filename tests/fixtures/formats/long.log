@@ -1,0 +1,11 @@
+[ 01-02 03:04:05.678  1234: 5678 D/MyTag ]
+hello world
+
+[ 01-02 03:04:05.679  1234: 1234 I/ActivityManager ]
+Start proc 4321:com.example.app/u0a123 for activity
+
+[ 01-02 03:04:05.701  4321: 4321 E/AndroidRuntime ]
+FATAL EXCEPTION: main
+java.lang.IllegalStateException: boom
+	at com.example.Foo.bar(Foo.kt:12)
+
