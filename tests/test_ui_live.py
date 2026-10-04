@@ -32,16 +32,24 @@ def device(tmp_path, monkeypatch):
     monkeypatch.setenv("ALOGS_ADB", f'"{sys.executable}" "{FAKE_ADB}"')
     monkeypatch.setenv("FAKE_ADB_LOG", str(log))
     monkeypatch.setenv("FAKE_ADB_PS", str(ps))
-    for var in ("FAKE_ADB_HANG", "FAKE_ADB_NO_MODIFIERS", "FAKE_ADB_DELAY", "FAKE_ADB_EXIT", "FAKE_ADB_DEVICES"):
+    for var in ("FAKE_ADB_HANG", "FAKE_ADB_NO_MODIFIERS", "FAKE_ADB_DELAY", "FAKE_ADB_EXIT",
+                "FAKE_ADB_DEVICES", "FAKE_ADB_PAUSE_AT"):
         monkeypatch.delenv(var, raising=False)
+    resume_file = tmp_path / "resume"
+    monkeypatch.setenv("FAKE_ADB_RESUME_FILE", str(resume_file))
 
-    def write(lines: list[str], delay: float = 0.0, hang: bool = False) -> None:
+    def write(lines: list[str], delay: float = 0.0, hang: bool = False, pause_at: int = 0) -> None:
+        """`pause_at`: the device stops after that many lines until `write.resume()`
+        (keeps tests independent of how fast each OS runs the fake adb)."""
         log.write_text("\n".join(lines) + "\n", encoding="utf-8")
         if delay:
             monkeypatch.setenv("FAKE_ADB_DELAY", str(delay))
         if hang:
             monkeypatch.setenv("FAKE_ADB_HANG", "1")
+        if pause_at:
+            monkeypatch.setenv("FAKE_ADB_PAUSE_AT", str(pause_at))
 
+    write.resume = lambda: resume_file.write_text("go")  # type: ignore[attr-defined]
     return write
 
 
@@ -70,20 +78,21 @@ async def test_openadb_streams_until_device_goes_away(device):
 
 
 async def test_live_follow_pause_and_resume(device):
-    device([tt(i) for i in range(400)], delay=0.005, hang=True)
+    device([tt(i) for i in range(400)], delay=0.002, hang=True, pause_at=150)
     app = AlogsApp()
     async with app.run_test(size=(160, 45)) as pilot:
         await submit(pilot, "openadb")
         log = app.query_one("#log", LogView)
-        await wait_until(pilot, lambda: len(app.store) > 100, what="first lines")
+        await wait_until(pilot, lambda: len(app.store) == 150, what="first 150 lines")
+        await pilot.pause()
         assert "LIVE" in status_text(app)
         assert log.at_bottom and log.scroll_offset.y > 0  # following
 
         log.scroll_to(None, 10, animate=False, immediate=True)
         await pilot.pause()
         assert "PAUSED" in status_text(app)
-        count = len(app.store)
-        await wait_until(pilot, lambda: len(app.store) > count + 50, what="more lines")
+        device.resume()
+        await wait_until(pilot, lambda: len(app.store) > 200, what="more lines")
         assert log.scroll_offset.y == 10  # paused: view does not move
 
         log.focus()
@@ -216,16 +225,17 @@ async def test_follow_survives_horizontal_scrollbar(device):
 
 
 async def test_live_batches_while_app_dialog_is_open(device):
-    device([tt(i, pid=4321 if i % 2 else 1234) for i in range(300)], delay=0.005, hang=True)
+    device([tt(i, pid=4321 if i % 2 else 1234) for i in range(300)], delay=0.002, hang=True, pause_at=20)
     app = AlogsApp()
     async with app.run_test(size=(160, 45)) as pilot:
         await submit(pilot, "openadb")
-        await wait_until(pilot, lambda: len(app.store) > 20, what="first lines")
+        await wait_until(pilot, lambda: len(app.store) == 20, what="first 20 lines")
         await submit(pilot, "app")
         await pilot.pause()
         assert isinstance(app.screen, PickListScreen)
-        count = len(app.store)
-        await wait_until(pilot, lambda: len(app.store) > count + 50, what="lines while dialog open")
+        device.resume()  # everything else arrives while the dialog is open
+        await wait_until(pilot, lambda: len(app.store) == 300, what="lines while dialog open")
+        assert isinstance(app.screen, PickListScreen)
         await pilot.press("escape")
         await pilot.pause()
         assert not isinstance(app.screen, PickListScreen)

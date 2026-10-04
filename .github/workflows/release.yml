@@ -1,0 +1,115 @@
+# Release on a version tag:  git tag v0.2.0 && git push origin v0.2.0
+#
+#   check ──► test (3 OS) ──► dist (wheel + sdist) ──► publish-pypi   (environment "pypi")
+#                        └──► binaries (3 OS) ───────► github-release (binaries + wheel + sdist)
+#
+# PyPI upload uses trusted publishing (OIDC): no token is stored anywhere. PyPI
+# must list this repository, workflow file "release.yml" and environment "pypi"
+# as a trusted publisher (see RELEASING.md).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches version, no placeholders left
+        run: python3 scripts/check_release.py "${{ github.ref_name }}"
+
+  test:
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run pytest -q
+
+  dist:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Smoke-test the built wheel
+        run: |
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke dist/*.whl
+          /tmp/smoke/bin/alogs --self-test tests/fixtures/formats/threadtime.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  binaries:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --group build
+      - name: Build single-file binary (self-tested by the script)
+        run: uv run python scripts/build_binary.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}
+          path: dist/alogs-*
+          if-no-files-found: error
+
+  publish-pypi:
+    needs: dist
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/alogs-cli/
+    permissions:
+      id-token: write # OIDC token for PyPI trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: [dist, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload files
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -l artifacts/
+          prerelease=""
+          case "$TAG" in *a*|*b*|*rc*) prerelease="--prerelease";; esac
+          gh release create "$TAG" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "alogs $TAG" \
+            --generate-notes $prerelease

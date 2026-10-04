@@ -93,16 +93,25 @@ Command input ──► CommandRegistry.dispatch ──► mutate FilterState / 
 
 ## Packaging & distribution
 
-Decision: local distribution only — no PyPI upload, no CI release pipeline.
+Published to PyPI and GitHub Releases by GitHub Actions on a version tag (procedure and
+one-time setup: [RELEASING.md](../RELEASING.md)).
 
-- Distribution name `alog-cli` (`alogs` is taken on PyPI by an unrelated project); import package
-  and command stay `alogs`. MIT license.
+- Distribution name `alogs-cli` (`alogs` is taken on PyPI by an unrelated project); import package
+  and command stay `alogs`. MIT license, author Vasil Khodzin.
 - `pyproject.toml` (hatchling), version read from `alogs/__init__.py`, console script
   `alogs = alogs.__main__:main`, Python ≥ 3.10. The wheel contains `alogs/app.tcss`.
 - Dependencies: `textual`, `platformdirs`, `tomli` (py < 3.11). Dependency groups: `dev`
   (pytest), `build` (PyInstaller).
-- Install from the checkout: `uv tool install .` / `pipx install .`; `uv build` makes a wheel to
-  share.
+- Users: `uv tool install alogs-cli` / `pipx install alogs-cli`, or a binary from GitHub Releases.
+  From a checkout: `uv tool install .`.
+- README.md is also the PyPI page: `hatch-fancy-pypi-readme` rewrites its relative links
+  (`docs/...`, `LICENSE`) to absolute GitHub URLs at build time.
+- Version: only `__version__` in `alogs/__init__.py`; the release tag must be `v` + that version
+  (`scripts/check_release.py`, run first in the release workflow).
+- CI (`.github/workflows/ci.yml`): tests on Windows / macOS / Linux × Python 3.10–3.13 on every
+  push and pull request. Release (`.github/workflows/release.yml`) on tags `v*`: check → tests →
+  wheel/sdist + binaries on 3 OSes → PyPI via trusted publishing (environment `pypi`, no stored
+  token) and a GitHub release with all files.
 - `scripts/build_binary.py` builds a one-file PyInstaller executable for the current OS
   (`--collect-submodules textual rich`, since both import modules lazily), names it
   `alogs-<version>-<os>-<arch>` and runs `--self-test` on it. Run it once per OS.

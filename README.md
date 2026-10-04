@@ -5,42 +5,39 @@ It opens saved logcat files (any common logcat / Android Studio format, auto-det
 live from `adb logcat`, and lets you narrow the view by app/PID, log level and tag using a command
 line plus a clickable filter panel.
 
-> Status: **milestones M1–M4 done** — parsing core (all logcat / Android Studio formats with
-> auto-detection), file viewing, level/tag/app filtering with a clickable filter panel, live
-> `adb logcat` with follow mode, local packaging (wheel + single-file binaries).
-> Commands: `help` / `open` / `openadb` / `export` / `format` / `levels` / `tag` / `app` /
-> `search` / `exit`.
+Features: all common logcat / Android Studio formats auto-detected · level / tag / app filters
+with a clickable filter panel · live `adb logcat` with follow mode (saved to a file as it
+streams) · `search` in tags, messages and PIDs · export of the filtered view.
 
-## Installation (local, no package index)
+## Installation
 
-The package is called **`alog-cli`**, the command is **`alogs`**. It is not published anywhere;
-install it from a checkout of this repository.
+The package is **`alogs-cli`**, the command it installs is **`alogs`**.
 
-**With Python tooling** — [uv](https://docs.astral.sh/uv/) downloads a suitable Python itself:
+**With [uv](https://docs.astral.sh/uv/)** (recommended — it downloads a suitable Python itself):
 
 ```sh
-uv tool install .              # from the repository root; `alogs` lands on PATH
-uv tool install --reinstall .  # after pulling changes
-uv tool uninstall alog-cli
+uv tool install alogs-cli
+uv tool upgrade alogs-cli      # later updates
 ```
 
-`pipx install .` works the same way. To hand the tool to someone else, build a wheel with
-`uv build` and give them `dist/alog_cli-<version>-py3-none-any.whl`
-(`uv tool install alog_cli-<version>-py3-none-any.whl`).
+or with pipx: `pipx install alogs-cli`. Works the same on Windows, macOS and Linux.
 
-**Without Python** — build a single-file executable on each OS you need (PyInstaller cannot
-cross-compile):
+**Without Python:** download the single-file binary for your OS from the
+[latest release](../../releases/latest) and put it on your PATH:
 
-```sh
-uv run --group build python scripts/build_binary.py
-# -> dist/alogs-<version>-<windows|macos|linux>-<arch>[.exe], self-tested after the build
-```
+| OS | File | Notes |
+|---|---|---|
+| Windows | `alogs-<version>-windows-x86_64.exe` | rename to `alogs.exe`; SmartScreen may ask once (More info → Run anyway) |
+| macOS (Apple silicon) | `alogs-<version>-macos-arm64` | `chmod +x`, then `xattr -d com.apple.quarantine <file>` (unsigned) |
+| Linux | `alogs-<version>-linux-x86_64` | `chmod +x` |
 
-Copy that one file anywhere (e.g. onto PATH) and run it. It unpacks to the temp directory
-on start (about 1 s).
+The binaries unpack themselves to the temp folder on start (about 1 s).
 
 **Check an installation:** `alogs --self-test some.log` opens the log headless and prints e.g.
-`alogs 0.1.0 self-test: OK 10 entries, format threadtime - 100%` (exit code 0).
+`alogs 0.1.0 self-test: OK 10 entries, format threadtime - 100%`.
+
+For live mode you need Android platform-tools (`adb`) — already there if Android Studio is
+installed.
 
 ## Usage
 
@@ -73,7 +70,12 @@ folder.
 uv sync --all-groups         # .venv with runtime, test and build dependencies
 uv run alogs path/to/log.txt # run from source
 uv run pytest                # tests
+uv tool install .            # install your working copy as the `alogs` command
+uv run --group build python scripts/build_binary.py   # single-file binary for this OS
 ```
+
+Releases are built and published by GitHub Actions when a version tag is pushed — see
+[RELEASING.md](RELEASING.md).
 
 ## Documentation
 
@@ -92,4 +94,7 @@ uv run pytest                # tests
 Requirements at runtime: a modern terminal (Windows Terminal, iTerm2, any xterm-compatible),
 and Android platform-tools (`adb`) for live mode.
 
-License: MIT (see [LICENSE](LICENSE)).
+Note: `openadb` saves the received log to `adblog-*.log` in the current folder; device logs can
+contain personal data — use `--no-save` if you don't want that file.
+
+License: MIT (see [LICENSE](LICENSE)) · Author: Vasil Khodzin

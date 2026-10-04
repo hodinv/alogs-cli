@@ -1,10 +1,10 @@
 [project]
-name = "alog-cli"
-dynamic = ["version"]
+name = "alogs-cli"
+dynamic = ["version", "readme"]
 description = "Console analyzer for Android logs (logcat files and live adb)"
-readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Vasil Khodzin" }]
 requires-python = ">=3.10"
 keywords = ["android", "logcat", "adb", "log", "tui", "terminal"]
 classifiers = [
@@ -13,6 +13,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Debuggers",
     "Topic :: System :: Logging",
 ]
@@ -21,6 +25,12 @@ dependencies = [
     "platformdirs>=4",
     "tomli>=2; python_version < '3.11'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/hodinv/alogs-cli"
+Documentation = "https://github.com/hodinv/alogs-cli/tree/main/docs"
+Issues = "https://github.com/hodinv/alogs-cli/issues"
+Changelog = "https://github.com/hodinv/alogs-cli/releases"
 
 [project.scripts]
 alogs = "alogs.__main__:main"
@@ -35,17 +45,29 @@ build = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=24"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "alogs/__init__.py"
 
+# PyPI shows README.md; relative links (docs/..., LICENSE) only work on GitHub,
+# so they are rewritten to absolute GitHub URLs for the PyPI page.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?://|#|mailto:)([^)\s]+)\)'
+replacement = '](https://github.com/hodinv/alogs-cli/blob/main/\1)'
+
 [tool.hatch.build.targets.wheel]
 packages = ["alogs"]
 
 [tool.hatch.build.targets.sdist]
-include = ["alogs", "tests", "docs", "scripts", "README.md", "LICENSE"]
+include = ["alogs", "tests", "docs", "scripts", "README.md", "LICENSE", "RELEASING.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

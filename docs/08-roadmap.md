@@ -17,8 +17,10 @@
 - `AppResolver` (adb `ps`, ActivityManager lines, Studio exports), `app` modal.
 
 ### M4 — Packaging ✅ done
-- Package `alog-cli` (MIT), local install with `uv tool install .` / `pipx install .`, wheel via
-  `uv build`. No public release (decided).
+- Package `alogs-cli` (MIT), install with `uv tool install alogs-cli` / `pipx install alogs-cli`
+  once published, or `uv tool install .` from a checkout.
+- GitHub Actions: CI on 3 OSes × Python 3.10–3.13; release workflow on `v*` tags publishing to
+  PyPI (trusted publishing) and GitHub Releases ([RELEASING.md](../RELEASING.md)).
 - `scripts/build_binary.py`: one-file PyInstaller binary for the current OS, self-tested.
 - `alogs --self-test FILE` to verify installations.
 
@@ -40,8 +42,7 @@
 - Open `.gz` / bugreport `.zip` directly; merge multiple files by timestamp.
 - Bookmarks on lines; jump to next error/crash (`FATAL EXCEPTION`, `ANR in`).
 - Export in other forms (CSV/JSON).
-- CI (GitHub Actions) running the tests and building binaries on all three OSes, if the
-  project ever gets a shared repository.
+- Code-signed / notarized binaries; Intel macOS binary; Homebrew / winget / Scoop packages.
 
 ## Open questions
 

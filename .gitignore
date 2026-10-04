@@ -7,3 +7,4 @@ build/
 *.spec
 local.properties
 *.log
+!tests/fixtures/**/*.log

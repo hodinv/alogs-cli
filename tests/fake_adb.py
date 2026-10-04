@@ -3,6 +3,7 @@
 FAKE_ADB_DEVICES      "serial:state,serial:state" or "none" (default "emulator-5554:device")
 FAKE_ADB_LOG          file whose lines `logcat` prints
 FAKE_ADB_DELAY        seconds between logcat lines (default 0)
+FAKE_ADB_PAUSE_AT     after this many logcat lines, wait until FAKE_ADB_RESUME_FILE exists
 FAKE_ADB_HANG         if set, logcat keeps running after the file (like a real device)
 FAKE_ADB_EXIT         logcat exit code after the file (default 0)
 FAKE_ADB_NO_MODIFIERS if set, logcat rejects `-v year` like very old devices
@@ -40,8 +41,14 @@ def main() -> int:
             print("logcat: Invalid -v argument 'year'", file=sys.stderr)
             return 1
         delay = float(os.environ.get("FAKE_ADB_DELAY", "0"))
+        pause_at = int(os.environ.get("FAKE_ADB_PAUSE_AT", "0"))
+        resume_file = os.environ.get("FAKE_ADB_RESUME_FILE", "")
         with open(os.environ["FAKE_ADB_LOG"], encoding="utf-8") as f:
-            for line in f:
+            for count, line in enumerate(f):
+                if pause_at and count == pause_at:
+                    # deterministic tests: stop until the test creates the resume file
+                    while not os.path.exists(resume_file):
+                        time.sleep(0.02)
                 sys.stdout.write(line)
                 sys.stdout.flush()
                 if delay:

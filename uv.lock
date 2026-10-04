@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
-name = "alog-cli"
+name = "alogs-cli"
 source = { editable = "." }
 dependencies = [
     { name = "platformdirs" },
