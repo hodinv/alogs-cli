@@ -29,7 +29,9 @@ async def wait_loaded(pilot, timeout: float = 10.0) -> None:
 
 
 def output_text(app) -> str:
-    return "\n".join(strip.text for strip in app.query_one("#output", RichLog).lines)
+    """Messages written to the output panel, one per line, unwrapped — the panel
+    itself wraps long lines (e.g. temp paths) at a width that differs per OS."""
+    return "\n".join(app.messages)
 
 
 def status_text(app) -> str:
@@ -134,3 +136,15 @@ async def test_exit_command():
     async with app.run_test() as pilot:
         await submit(pilot, "exit")
         assert app._exit_renderables is not None or not app.is_running
+
+
+async def test_output_messages_match_the_panel():
+    long = "x" * 300  # far wider than the panel: wraps on screen
+    app = AlogsApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.write(long)
+        app.write_error("boom")
+        await pilot.pause()
+        panel = app.query_one("#output", RichLog)
+        assert len(panel.lines) > 2  # wrapped on screen ...
+        assert list(app.messages)[-2:] == [long, "boom"]  # ... but kept whole here

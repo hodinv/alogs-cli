@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from bisect import bisect_right
 from functools import partial
 from pathlib import Path
@@ -50,6 +51,7 @@ SYNC_FILTER_LIMIT = 100_000  # above this, refilter in a worker thread
 PANEL_REFRESH_SECONDS = 0.5  # tag counts refresh rate while loading / live
 LIVE_MAX_ENTRIES = 2_000_000  # ring buffer size for live sources
 PS_REFRESH_SECONDS = 5.0
+OUTPUT_MAX_LINES = 2000
 
 
 class AlogsApp(App):
@@ -106,6 +108,7 @@ class AlogsApp(App):
         self._filtering = False
         self._panel_refresh_pending = False
         self._resolver_version_seen = -1
+        self.messages: deque[str] = deque(maxlen=OUTPUT_MAX_LINES)  # what the output panel shows
 
     # -- layout ---------------------------------------------------------------
 
@@ -115,7 +118,7 @@ class AlogsApp(App):
         self.log_view = LogView(self.engine.visible, id="log")
         self.log_view.border_title = "Log"
         self.command_input = CommandInput(self.commands.names(), self._history_path, id="command")
-        self.output = RichLog(id="output", wrap=True, markup=False, max_lines=2000)
+        self.output = RichLog(id="output", wrap=True, markup=False, max_lines=OUTPUT_MAX_LINES)
         self.filter_panel = FilterPanel(id="filters")
         self.status_bar = Static(id="status")
         with Horizontal(id="main"):
@@ -163,7 +166,7 @@ class AlogsApp(App):
 
     def _run_line(self, line: str, echo: bool = True) -> None:
         if echo:
-            self.output.write(Text(f"> {line}", style="dim"))
+            self._emit(Text(f"> {line}", style="dim"))
         try:
             self.commands.dispatch(self, line)
         except CommandError as e:
@@ -174,10 +177,15 @@ class AlogsApp(App):
     # -- CommandContext ---------------------------------------------------------
 
     def write(self, text: str) -> None:
-        self.output.write(Text(text))
+        self._emit(Text(text))
 
     def write_error(self, text: str) -> None:
-        self.output.write(Text(text, style="bold red"))
+        self._emit(Text(text, style="bold red"))
+
+    def _emit(self, text: Text) -> None:
+        # `messages` keeps the unwrapped text (the panel wraps long lines to its width)
+        self.messages.append(text.plain)
+        self.output.write(text)
 
     def open_file(self, path: str, force: bool = False) -> None:
         source = FileSource(path)

@@ -252,7 +252,7 @@ async def test_openadb_saves_everything_received(device, tmp_path):
         assert len(saved) == 1
         assert saved[0].name[len("adblog-"):-len(".log")].count("-") == 3  # YYYY-MM-DD-HHMMSS
         assert saved[0].read_text(encoding="utf-8").splitlines() == lines
-        out = output_text(app).replace("\n", "")  # long paths wrap in the output area
+        out = output_text(app)
         assert f"Saving everything received to {saved[0]}" in out
         assert f"Saved 60 lines to {saved[0]}" in out
         assert app.restart_args() == ["--adb", "--serial", "emulator-5554", "--levels=E"]
