@@ -13,12 +13,13 @@ alogs/
     log_view.py          # virtualized log list (Textual ScrollView + line API)
     command_input.py     # Input with history + completion, output area
     filter_panel.py      # ActiveFilters + AvailableTags (clickable lists)
-    app_select.py        # modal SelectionList for `app`
+    pick_list.py         # modal checkbox list for `app` and `search` results
     status_bar.py
   model/
     entry.py             # LogEntry dataclass (slots), Level enum
     store.py             # LogStore: entries list, interned tags, ring-buffer cap
     filters.py           # FilterState + FilterEngine (visible index, tag counts)
+    search.py            # `search`: tags / messages / PIDs containing a text
   sources/
     base.py              # LogSource protocol
     file_source.py

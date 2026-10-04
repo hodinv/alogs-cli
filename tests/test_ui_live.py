@@ -9,7 +9,7 @@ from textual.widgets import SelectionList
 
 from alogs.app import AlogsApp
 from alogs.sources import adb_source
-from alogs.widgets.app_select import AppSelectScreen
+from alogs.widgets.pick_list import PickListScreen
 from alogs.widgets.log_view import LogView
 
 from .conftest import FORMATS
@@ -25,6 +25,7 @@ def tt(i: int, pid: int = 4321, tag: str = "MyTag", level: str = "I") -> str:
 @pytest.fixture
 def device(tmp_path, monkeypatch):
     """Configure the fake adb; returns a function writing the device log."""
+    monkeypatch.chdir(tmp_path)  # openadb saves adblog-*.log into the current folder
     log = tmp_path / "device.log"
     ps = tmp_path / "ps.txt"
     ps.write_text("PID NAME\n 1234 system_server\n 4321 com.example.app\n", encoding="utf-8")
@@ -174,8 +175,8 @@ async def test_app_dialog_select_apply_and_cancel():
         await wait_until(pilot, lambda: not app._loading, what="load")
         await submit(pilot, "app")
         await pilot.pause()
-        assert isinstance(app.screen, AppSelectScreen)
-        selection_list = app.screen.query_one("#app-list", SelectionList)
+        assert isinstance(app.screen, PickListScreen)
+        selection_list = app.screen.query_one("#pick-list", SelectionList)
         keys = [selection_list.get_option_at_index(i).value for i in range(selection_list.option_count)]
         assert keys[0] == "pkg:com.example.app"  # most entries first
         assert "pid:1234" in keys and "pid:1000" in keys
@@ -183,15 +184,15 @@ async def test_app_dialog_select_apply_and_cancel():
         await pilot.press("space")  # toggle the highlighted first row
         await pilot.press("ctrl+s")
         await pilot.pause()
-        assert not isinstance(app.screen, AppSelectScreen)
+        assert not isinstance(app.screen, PickListScreen)
         assert app.filters.packages == {"com.example.app"}
         assert "App: com.example.app (4321)" in output_text(app)
 
         await submit(pilot, "app")
         await pilot.pause()
-        selection_list = app.screen.query_one("#app-list", SelectionList)
+        selection_list = app.screen.query_one("#pick-list", SelectionList)
         assert selection_list.selected == ["pkg:com.example.app"]
-        app.screen.query_one("#app-search").value = "1234"
+        app.screen.query_one("#pick-search").value = "1234"
         await pilot.pause()
         assert selection_list.option_count == 1
         await pilot.press("escape")
@@ -222,9 +223,51 @@ async def test_live_batches_while_app_dialog_is_open(device):
         await wait_until(pilot, lambda: len(app.store) > 20, what="first lines")
         await submit(pilot, "app")
         await pilot.pause()
-        assert isinstance(app.screen, AppSelectScreen)
+        assert isinstance(app.screen, PickListScreen)
         count = len(app.store)
         await wait_until(pilot, lambda: len(app.store) > count + 50, what="lines while dialog open")
         await pilot.press("escape")
         await pilot.pause()
-        assert not isinstance(app.screen, AppSelectScreen)
+        assert not isinstance(app.screen, PickListScreen)
+
+
+async def test_openadb_saves_everything_received(device, tmp_path):
+    lines = [tt(i, level="E" if i % 3 == 0 else "I") for i in range(60)]
+    device(lines)
+    app = AlogsApp(startup_commands=["levels +E"])  # filters must not affect the saved file
+    async with app.run_test(size=(160, 45)) as pilot:
+        await submit(pilot, "openadb")
+        await wait_until(pilot, lambda: "STOPPED" in status_text(app), what="stop")
+        saved = list(tmp_path.glob("adblog-*.log"))
+        assert len(saved) == 1
+        assert saved[0].name[len("adblog-"):-len(".log")].count("-") == 3  # YYYY-MM-DD-HHMMSS
+        assert saved[0].read_text(encoding="utf-8").splitlines() == lines
+        out = output_text(app).replace("\n", "")  # long paths wrap in the output area
+        assert f"Saving everything received to {saved[0]}" in out
+        assert f"Saved 60 lines to {saved[0]}" in out
+        assert app.restart_args() == ["--adb", "--serial", "emulator-5554", "--levels=E"]
+
+
+async def test_openadb_no_save(device, tmp_path):
+    device([tt(i) for i in range(5)])
+    app = AlogsApp()
+    async with app.run_test(size=(160, 45)) as pilot:
+        await submit(pilot, "openadb --no-save")
+        await wait_until(pilot, lambda: "STOPPED" in status_text(app), what="stop")
+        assert list(tmp_path.glob("adblog-*.log")) == []
+        assert "--no-save" in app.restart_args()
+
+
+async def test_openadb_save_failure_keeps_streaming(device, tmp_path, monkeypatch):
+    from alogs import app as app_module
+
+    blocker = tmp_path / "blocker"
+    blocker.mkdir()  # a directory: opening it as a file fails
+    monkeypatch.setattr(app_module, "default_save_path", lambda: blocker)
+    device([tt(i) for i in range(5)])
+    app = AlogsApp()
+    async with app.run_test(size=(160, 45)) as pilot:
+        await submit(pilot, "openadb")
+        await wait_until(pilot, lambda: "STOPPED" in status_text(app), what="stop")
+        assert len(app.store) == 5
+        assert "continuing without saving" in output_text(app)

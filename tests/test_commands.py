@@ -23,12 +23,16 @@ class FakeContext:
         self.filter_changes = 0
         self.adb_opened: list[str | None] = []
         self.dialogs = 0
+        self.searches: list[tuple[str, bool, bool]] = []
 
     def filters_changed(self):
         self.filter_changes += 1
 
-    def open_adb(self, serial=None):
-        self.adb_opened.append(serial)
+    def open_adb(self, serial=None, save=True):
+        self.adb_opened.append((serial, save))
+
+    def search(self, text, in_messages=False, by_app=False):
+        self.searches.append((text, in_messages, by_app))
 
     def apps(self):
         from alogs.sources.resolver import AppInfo
@@ -185,7 +189,8 @@ def test_levels_typo_changes_nothing(ctx):
 def test_openadb(ctx):
     run(ctx, "openadb")
     run(ctx, "openadb -s emulator-5554")
-    assert ctx.adb_opened == [None, "emulator-5554"]
+    run(ctx, "openadb --no-save -s emulator-5554")
+    assert ctx.adb_opened == [(None, True), ("emulator-5554", True), ("emulator-5554", False)]
     with pytest.raises(CommandError, match="Usage"):
         run(ctx, "openadb emulator-5554")
 
@@ -211,3 +216,42 @@ def test_app_selection_forms(ctx):
     assert (ctx.filters.packages, ctx.filters.pids) == (set(), set())
     with pytest.raises(CommandError, match="Usage"):
         run(ctx, "app +")
+
+
+def test_levels_none_and_commas(ctx):
+    run(ctx, "levels none")
+    assert ctx.filters.levels_touched and ctx.filters.levels == set()
+    run(ctx, "levels all")
+    run(ctx, "levels W,E")
+    assert ctx.filters.levels == {Level.WARN, Level.ERROR}
+    run(ctx, "levels all")
+    run(ctx, "levels -D,-V")
+    assert ctx.filters.levels == set(ALL_LEVELS) - {Level.DEBUG, Level.VERBOSE}
+
+
+def test_tag_command(ctx):
+    assert run(ctx, "tag") == "Tags: all"
+    run(ctx, 'tag MyTag "My Tag"')
+    assert ctx.filters.tags == {"MyTag", "My Tag"}
+    run(ctx, "tag +OkHttp -MyTag")
+    assert ctx.filters.tags == {"My Tag", "OkHttp"}
+    assert run(ctx, "tag all").endswith("Tags: all")
+    assert ctx.filters.tags == set()
+    assert ctx.filter_changes == 3
+    with pytest.raises(CommandError):
+        run(ctx, "tag +")
+
+
+def test_search_command_flags(ctx):
+    run(ctx, "search net")
+    run(ctx, "search -m connection timed out")
+    run(ctx, "search -app -m FATAL")
+    run(ctx, "search -APP Activity")
+    assert ctx.searches == [
+        ("net", False, False),
+        ("connection timed out", True, False),
+        ("FATAL", True, True),
+        ("Activity", False, True),
+    ]
+    with pytest.raises(CommandError, match="Usage: search"):
+        run(ctx, "search -m")

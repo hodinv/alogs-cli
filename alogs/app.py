@@ -19,15 +19,25 @@ from . import config
 from .commands import CommandError, CommandRegistry, default_commands
 from .export import export_entries
 from .model.entry import LogEntry
-from .model.filters import FilterEngine, FilterSnapshot, FilterState, compute
+from .model.filters import ALL_LEVELS, FilterEngine, FilterSnapshot, FilterState, compute
 from .model.store import LogStore
 from .parsing.detect import Detection
 from .parsing.pipeline import ParserPipeline
 from .parsing.registry import FormatConfigError, ParserRegistry, default_registry
-from .sources.adb_source import AdbError, AdbSource, choose_device, find_adb, list_devices, process_list
+from .model.search import MAX_HITS
+from .model.search import search as search_entries
+from .sources.adb_source import (
+    AdbError,
+    AdbSource,
+    choose_device,
+    default_save_path,
+    find_adb,
+    list_devices,
+    process_list,
+)
 from .sources.file_source import FileSource, SourceError
 from .sources.resolver import AppInfo, AppResolver
-from .widgets.app_select import AppSelection, AppSelectScreen
+from .widgets.pick_list import PickListScreen, app_rows, search_rows
 from .widgets.command_input import CommandInput
 from .widgets.filter_panel import FilterPanel
 from .widgets.log_view import LogView
@@ -59,6 +69,9 @@ class AlogsApp(App):
         history_path: Path | None = None,
         live_max_entries: int = LIVE_MAX_ENTRIES,
         initial_adb: bool = False,
+        initial_serial: str | None = None,
+        save_adb: bool = True,
+        startup_commands: list[str] | None = None,
     ) -> None:
         super().__init__()
         self._config_error: str | None = None
@@ -78,6 +91,9 @@ class AlogsApp(App):
         self._history_path = history_path
         self._initial_file = initial_file
         self._initial_adb = initial_adb
+        self._initial_serial = initial_serial
+        self._save_adb = save_adb
+        self._startup_commands = list(startup_commands or [])
         self._forced_format = forced_format
         self._source: Source | None = None
         self._connecting = False
@@ -120,10 +136,13 @@ class AlogsApp(App):
             self._forced_format = None
         self._update_status()
         self._refresh_panel()
+        for line in self._startup_commands:  # filters from the alogs command line
+            self._run_line(line, echo=False)
         if self._initial_file:
             self._run_line(f'open "{self._initial_file}"', echo=False)
         elif self._initial_adb:
-            self._run_line("openadb", echo=False)
+            serial = f' -s "{self._initial_serial}"' if self._initial_serial else ""
+            self._run_line(f"openadb{serial}{'' if self._save_adb else ' --no-save'}", echo=False)
 
     def on_unmount(self) -> None:
         self._stop_source()
@@ -169,7 +188,8 @@ class AlogsApp(App):
         self.write(f"Opening {source.path} …")
         self._start_load(source)
 
-    def open_adb(self, serial: str | None = None) -> None:
+    def open_adb(self, serial: str | None = None, save: bool = True) -> None:
+        self._save_adb = save
         adb = find_adb()
         if adb is None:
             raise CommandError(
@@ -207,7 +227,7 @@ class AlogsApp(App):
             return
         if isinstance(source, AdbSource):
             self.write(f"Format set to {label}; restarting adb logcat …")
-            self._start_load(AdbSource(source.adb, source.serial))
+            self._start_load(self._new_adb_source(source.adb, source.serial))
             return
         self.write(f"Format set to {label}; re-reading {source.name} …")
         fresh = FileSource(source.path)
@@ -226,13 +246,91 @@ class AlogsApp(App):
         self.filters_changed()
 
     def show_app_dialog(self) -> None:
-        def done(result: AppSelection | None) -> None:
+        def done(result: set[str] | None) -> None:
             if result is not None:
-                self.select_apps(*result)
+                packages = {k[4:] for k in result if k.startswith("pkg:")}
+                pids = {int(k[4:]) for k in result if k.startswith("pid:")}
+                self.select_apps(packages, pids)
                 self.write(f"App: {self.app_filter_text()}")
 
-        screen = AppSelectScreen(self.apps(), self.filters.packages, self.filters.pids)
-        self.push_screen(screen, done)
+        selected = {f"pkg:{p}" for p in self.filters.packages} | {f"pid:{p}" for p in self.filters.pids}
+        rows = app_rows(self.apps(), self.filters.packages)
+        hint = "Space/Enter/click toggles · Ctrl+S applies · Esc cancels · nothing selected = all apps"
+        self.push_screen(PickListScreen("Apps / processes", rows, selected, hint), done)
+
+    def search(self, text: str, in_messages: bool = False, by_app: bool = False) -> None:
+        if not self.store.entries:
+            raise CommandError("No log loaded — open a file or 'openadb' first.")
+        entries = list(self.store.entries)  # snapshot: live batches keep arriving
+        generation = self._generation
+
+        def work() -> None:
+            hits = search_entries(entries, text, in_messages=in_messages, by_app=by_app)
+            try:
+                self.call_from_thread(self._show_search, generation, text, in_messages, by_app, hits)
+            except RuntimeError:
+                pass
+
+        self.run_worker(work, thread=True, exclusive=True, group="search", exit_on_error=False)
+
+    def _show_search(self, generation, text, in_messages, by_app, hits) -> None:
+        if generation != self._generation:
+            return  # another log was opened meanwhile
+        what = "PIDs" if by_app else "tags"
+        where = "messages" if in_messages else "tag names"
+        if not hits:
+            self.write(f"No {what} with '{text}' in {where}.")
+            return
+        more = f" (first {MAX_HITS})" if len(hits) >= MAX_HITS else ""
+        self.write(f"Found {len(hits):,} {what}{more} with '{text}' in {where} — tick to add to the filter.")
+        names = {h.pid: self.resolver.name_of(h.pid) or "" for h in hits if h.pid is not None}
+        rows = search_rows(hits, names)
+        shown = {key for _, key in rows}
+        selected = {f"tag:{t}" for t in self.filters.tags} | {f"pid:{p}" for p in self.filters.pids}
+
+        def done(result: set[str] | None) -> None:
+            if result is None:
+                return
+            for key in shown:
+                kind, value = key.split(":", 1)
+                target = self.filters.tags if kind == "tag" else self.filters.pids
+                item = value if kind == "tag" else int(value)
+                if key in result:
+                    target.add(item)  # type: ignore[arg-type]
+                else:
+                    target.discard(item)  # type: ignore[arg-type]
+            self.filters_changed()
+            if by_app:
+                self.write(f"App: {self.app_filter_text()}")
+            else:
+                self.write(f"Tags: {', '.join(sorted(self.filters.tags, key=str.lower)) or 'all'}")
+
+        title = f"search{' -app' if by_app else ''}{' -m' if in_messages else ''}: {text}"
+        self.push_screen(PickListScreen(title, rows, selected & shown), done)
+
+    def restart_args(self) -> list[str]:
+        """`alogs` arguments that reopen the current source with the current filters."""
+        args: list[str] = []
+        source = self._source
+        if isinstance(source, FileSource):
+            args.append(str(source.path.resolve()))
+        elif isinstance(source, AdbSource):
+            args += ["--adb", "--serial", source.serial]
+            if source.save_path is None:
+                args.append("--no-save")
+        if self._forced_format:
+            args += ["--format", self._forced_format]
+        state = self.filters
+        if state.levels_touched:
+            letters = ",".join(level.letter for level in ALL_LEVELS if level in state.levels)
+            args.append(f"--levels={letters or 'none'}")
+        for tag in sorted(state.tags, key=str.lower):
+            args += ["--tag", tag]
+        for package in sorted(state.packages):
+            args += ["--app", package]
+        for pid in sorted(state.pids):
+            args += ["--pid", str(pid)]
+        return args
 
     def app_filter_text(self) -> str:
         if not self.filters.has_app_filter:
@@ -256,7 +354,7 @@ class AlogsApp(App):
         except AdbError as e:
             self.call_from_thread(self._on_adb_error, generation, str(e))
             return
-        self.call_from_thread(self._on_adb_connected, generation, AdbSource(adb, device.serial))
+        self.call_from_thread(self._on_adb_connected, generation, adb, device.serial)
 
     def _on_adb_error(self, generation: int, message: str) -> None:
         if generation != self._connect_generation:
@@ -265,11 +363,17 @@ class AlogsApp(App):
         self.write_error(message)
         self._update_status()
 
-    def _on_adb_connected(self, generation: int, source: AdbSource) -> None:
+    def _new_adb_source(self, adb: list[str], serial: str) -> AdbSource:
+        save_path = default_save_path().resolve() if self._save_adb else None
+        if save_path is not None:
+            self.write(f"Saving everything received to {save_path}")
+        return AdbSource(adb, serial, save_path)
+
+    def _on_adb_connected(self, generation: int, adb: list[str], serial: str) -> None:
         if generation != self._connect_generation:
             return
-        self.write(f"Reading live log from {source.serial} (End resumes following)")
-        self._start_load(source)
+        self.write(f"Reading live log from {serial} (End resumes following)")
+        self._start_load(self._new_adb_source(adb, serial))
 
     def _start_load(self, source: Source) -> None:
         self._stop_source()
@@ -404,6 +508,11 @@ class AlogsApp(App):
         self._progress = progress
         live = isinstance(self._source, AdbSource)
         if live:
+            source = self._source
+            assert isinstance(source, AdbSource)
+            if source.save_error and source.save_path is not None:
+                self.write_error(f"{source.save_error} — continuing without saving")
+                source.save_path = None
             dropped = self.store.trim(self.live_max_entries)
             if dropped:
                 self.engine.remove_oldest(dropped)
@@ -418,6 +527,8 @@ class AlogsApp(App):
                 assert isinstance(source, AdbSource)
                 reason = f" — {source.error}" if source.error else ""
                 self.write_error(f"adb logcat stopped (exit code {source.returncode}){reason}")
+                if source.save_path is not None and not source.save_error:
+                    self.write(f"Saved {source.saved_lines:,} lines to {source.save_path}")
             else:
                 fmt = detection.describe() if detection else "?"
                 self.write(f"Loaded {len(self.store):,} entries · format: {fmt}")

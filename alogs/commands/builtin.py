@@ -76,8 +76,13 @@ def _levels(ctx: CommandContext, args: list[str]) -> None:
     if not args:
         ctx.write(f"Levels: {state.levels_text()}")
         return
+    # "+W,+E" works like "+W +E" (handy on the alogs command line)
+    args = [part for arg in args for part in arg.split(",") if part]
     if len(args) == 1 and args[0].lower() in ("all", "*"):
         state.reset_levels()
+    elif len(args) == 1 and args[0].lower() == "none":
+        state.levels_touched = True
+        state.levels = set()
     else:
         changes = []
         for arg in args:
@@ -94,12 +99,55 @@ def _levels(ctx: CommandContext, args: list[str]) -> None:
 
 
 def _openadb(ctx: CommandContext, args: list[str]) -> None:
+    no_save, args = take_flag(args, "--no-save", "-n")
     serial = None
     if args[:1] == ["-s"] and len(args) == 2:
         serial = args[1]
     elif args:
-        raise CommandError("Usage: openadb [-s <serial>]")
-    ctx.open_adb(serial)
+        raise CommandError("Usage: openadb [-s <serial>] [--no-save]")
+    ctx.open_adb(serial, save=not no_save)
+
+
+def _selection_args(args: list[str], current: set[str]) -> set[str]:
+    """`+X -Y` modify `current`; bare values replace it."""
+    result = set(current) if any(a[:1] in "+-" for a in args) else set()
+    for arg in args:
+        sign, value = (arg[0], arg[1:]) if arg[:1] in "+-" else ("+", arg)
+        if not value:
+            raise CommandError("missing name after + / -")
+        if sign == "+":
+            result.add(value)
+        else:
+            result.discard(value)
+    return result
+
+
+def _tag(ctx: CommandContext, args: list[str]) -> None:
+    state = ctx.filters
+    if args:
+        if len(args) == 1 and args[0].lower() in ("all", "*"):
+            state.tags = set()
+        else:
+            state.tags = _selection_args(args, state.tags)
+        ctx.filters_changed()
+    shown = ", ".join(sorted(state.tags, key=str.lower)) or "all"
+    ctx.write(f"Tags: {shown}")
+
+
+def _search(ctx: CommandContext, args: list[str]) -> None:
+    by_app = in_messages = False
+    words = []
+    for arg in args:
+        if arg.lower() in ("-app", "--app", "-a"):
+            by_app = True
+        elif arg.lower() in ("-m", "--message", "--messages"):
+            in_messages = True
+        else:
+            words.append(arg)
+    text = " ".join(words)
+    if not text:
+        raise CommandError("Usage: search [-app] [-m] <text>")
+    ctx.search(text, in_messages=in_messages, by_app=by_app)
 
 
 def _app(ctx: CommandContext, args: list[str]) -> None:
@@ -122,19 +170,13 @@ def _app(ctx: CommandContext, args: list[str]) -> None:
     pids: set[int] = set()
     if not (len(args) == 1 and args[0].lower() in ("all", "*")):
         state = ctx.filters
-        packages, pids = set(state.packages), set(state.pids)
-        if all(a[:1] not in "+-" for a in args):
-            packages, pids = set(), set()  # bare names replace the selection
-        for arg in args:
-            sign, value = (arg[0], arg[1:]) if arg[:1] in "+-" else ("+", arg)
-            if not value:
-                raise CommandError("Usage: app [list | all | [+|-]<package|pid> ...]")
-            target = pids if value.isdigit() else packages
-            item = int(value) if value.isdigit() else value
-            if sign == "+":
-                target.add(item)  # type: ignore[arg-type]
-            else:
-                target.discard(item)  # type: ignore[arg-type]
+        current = state.packages | {str(p) for p in state.pids}
+        try:
+            chosen = _selection_args(args, current)
+        except CommandError:
+            raise CommandError("Usage: app [list | all | [+|-]<package|pid> ...]") from None
+        pids = {int(v) for v in chosen if v.isdigit()}
+        packages = {v for v in chosen if not v.isdigit()}
     ctx.select_apps(packages, pids)
     ctx.write(f"App: {ctx.app_filter_text()}")
 
@@ -164,11 +206,13 @@ COMMANDS = [
     Command(
         "openadb",
         "Read the live log from a device via adb logcat",
-        "openadb\nopenadb -s <serial>",
+        "openadb [-s <serial>] [--no-save]",
         "Start reading live from the connected device (adb logcat). Filters are kept.\n"
         "With several devices connected, pick one with -s (see 'adb devices').\n"
         "The view follows new lines while scrolled to the bottom; scroll up to\n"
         "pause, press End to follow again.\n\n"
+        "Everything received is also saved to adblog-YYYY-MM-DD-HHMMSS.log in the\n"
+        "current folder (unfiltered, as received); --no-save turns that off.\n\n"
         "adb is looked up on PATH, then via sdk.dir in local.properties (current\n"
         "folder or a parent, as written by Android Studio), then ANDROID_HOME /\n"
         "ANDROID_SDK_ROOT, then the default SDK folder.",
@@ -196,16 +240,44 @@ COMMANDS = [
     Command(
         "levels",
         "Switch log levels on or off",
-        "levels\nlevels [+|-]LEVEL ...\nlevels all",
+        "levels\nlevels [+|-]LEVEL ...\nlevels all\nlevels none",
         "Levels: V/VERBOSE D/DEBUG I/INFO W/WARN E/ERROR F/FATAL A/ASSERT\n"
         "(case-insensitive; a bare name means +).\n\n"
         "Initially all levels are on. The first change decides the mode:\n"
         "  +X  -> only X is on\n"
         "  -X  -> everything except X is on\n"
         "After that +X / -X simply add / remove X. Arguments apply left to right.\n"
-        "'levels' shows the current state, 'levels all' turns everything back on.\n\n"
-        "Examples:\n  levels +ERROR\n  levels +W +E\n  levels -DEBUG -VERBOSE\n  levels all",
+        "'levels' shows the current state, 'levels all' turns everything back on,\n"
+        "'levels none' turns everything off. Commas work as separators too.\n\n"
+        "Examples:\n  levels +ERROR\n  levels +W +E\n  levels -DEBUG,-VERBOSE\n  levels all",
         _levels,
+    ),
+    Command(
+        "tag",
+        "Select tags to show",
+        "tag\ntag all\ntag <tag> ...\ntag [+|-]<tag> ...",
+        "tag                 show the selected tags\n"
+        "tag all             show all tags again\n"
+        "tag MyTag OkHttp    show only these tags (bare names replace the selection)\n"
+        "tag +MyTag -OkHttp  add / remove tags\n\n"
+        "Tags are case-sensitive; quote tags with spaces: tag +\"My Tag\".\n"
+        "Clicking tags in the filter panel does the same.",
+        _tag,
+    ),
+    Command(
+        "search",
+        "Find tags, messages or PIDs and add them to the filter",
+        "search <text>\nsearch -m <text>\nsearch -app <text>\nsearch -app -m <text>",
+        "Case-insensitive search in the whole loaded log (not only what is shown).\n\n"
+        "search <text>          tags whose name contains <text>\n"
+        "search -m <text>       messages containing <text>; one row per distinct tag\n"
+        "                       as 'tag: first matching message'\n"
+        "search -app <text>     PIDs that log a tag containing <text>\n"
+        "search -app -m <text>  PIDs that log a message containing <text>\n\n"
+        "Results open in a checkbox list, most matches first; ticked rows are added\n"
+        "to the tag / PID filter when you apply (Ctrl+S), unticked rows removed.\n\n"
+        "Examples:\n  search net\n  search -m timeout\n  search -app -m FATAL EXCEPTION",
+        _search,
     ),
     Command(
         "app",

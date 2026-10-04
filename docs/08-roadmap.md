@@ -22,10 +22,17 @@
 - `scripts/build_binary.py`: one-file PyInstaller binary for the current OS, self-tested.
 - `alogs --self-test FILE` to verify installations.
 
+### After M4 — additions ✅ done
+- `openadb` saves everything received to `adblog-YYYY-MM-DD-HHMMSS.log` (`--no-save`).
+- Filters from the command line: `--levels`, `--tag`, `--app`, `--pid` (+ `--serial`,
+  `--no-save` for `--adb`); on exit the matching restart command line is printed.
+- `search` (tags / `-m` messages / `-app` PIDs) with a checkbox dialog to add results to the
+  filter; `tag` command; `levels none` and comma-separated levels.
+
 ## Future ideas
 
 - `find <text>` / `grep <regex>` — text filter and highlight; `n`/`N` to jump between matches.
-- `tag [+|-]<tag>` — tag selection from the command line; tag exclusion (`-tag` hides it).
+- Tag exclusion (hide a noisy tag instead of selecting the wanted ones).
 - `clear` (clear buffer, live mode), `pause` / `resume`.
 - Device picker dialog, `-b` buffers (main/system/crash/events/radio).
 - Time range filter (`since 12:00:00`, `until …`).

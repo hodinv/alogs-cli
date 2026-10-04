@@ -58,6 +58,10 @@ Both sources feed the same pipeline: `lines → ParserPipeline → LogStore → 
   the status bar shows "dropped X", filters/tag counts are adjusted incrementally.
 - On process exit: "adb logcat stopped (exit code N) — <stderr>"; entries are kept; `openadb`
   again restarts. Opening a file or another `openadb` stops the running adb process.
+- Saving: `AdbSource(save_path=…)` writes every received line (before parsing, so unaffected by
+  filters, format fallback attempts included) to `adblog-YYYY-MM-DD-HHMMSS.log` in the current
+  folder, flushing on every idle period; `--no-save` disables it. Restarting logcat (e.g. via
+  `format`) starts a new file.
 
 ## Package ↔ PID resolution (`AppResolver`)
 

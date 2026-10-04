@@ -46,7 +46,7 @@ Errors: file not found, not a file, not readable, binary file (refused unless `-
 
 ---
 
-## `openadb [-s <serial>]`
+## `openadb [-s <serial>] [--no-save]`
 
 Start reading live from the device via `adb logcat`. Also available as `alogs --adb`.
 
@@ -58,6 +58,11 @@ Start reading live from the device via `adb logcat`. Also available as `alogs --
 - When adb exits or the device disconnects, the output shows `adb logcat stopped (exit code N)`
   with adb's message, the status bar shows `STOPPED`; entries stay in memory.
 - Filters are kept; the device's `ps` process list is read every 5 s for `app`.
+- **Saves everything received** to `adblog-YYYY-MM-DD-HHMMSS.log` in the current folder
+  (every line as received, unfiltered, UTF-8, LF). The output shows the path when it starts and
+  `Saved N lines to …` when adb stops; the file is flushed whenever the stream goes quiet, so it
+  is complete even if the app is killed. `--no-save` (or `-n`) turns saving off. If the file
+  cannot be created, streaming continues and an error says so.
 
 `adb` lookup: PATH → `sdk.dir` in `local.properties` (current folder or a parent) →
 `ANDROID_HOME` / `ANDROID_SDK_ROOT` → default SDK folder (details in
@@ -71,7 +76,18 @@ Errors: `adb not found …`, `no devices/emulators found`, `more than one device
 
 ## `exit`
 
-Exit the application (stops adb if running). Aliases: `quit`, `q`.
+Exit the application (stops adb if running). Aliases: `quit`, `q`; `Ctrl+Q` does the same.
+
+After exiting, the terminal shows a command line that starts alogs again with the same source
+and filters, e.g.
+
+```
+To start again with the same source and filters:
+  alogs C:\logs\crash.log --levels=W,E --tag AndroidRuntime --app com.example.app
+```
+
+(For live mode: `alogs --adb --serial <serial> …`. Nothing is printed when no log was open and
+no filter set.)
 
 ---
 
@@ -104,6 +120,8 @@ Semantics (detailed in [04](04-filtering-model.md#levels)):
 - Several arguments are applied left to right: `levels +W +E` → only W and E.
 - `levels` with no arguments prints the current state.
 - `levels all` (or `levels *`) → back to the untouched state (all on).
+- `levels none` → every level off.
+- Commas separate like spaces: `levels W,E`, `levels -D,-V`.
 
 Examples:
 
@@ -139,6 +157,43 @@ Show the list of apps found in the current log and select/unselect them.
   cancels, **Clear** unselects all. A search box filters the rows by name or PID.
 - Nothing selected = all apps shown. Selecting an app covers all its PIDs, including PIDs that
   appear later (app restarts); before any PID is known, the app filter shows nothing.
+
+---
+
+## `tag`
+
+```
+tag                    show the selected tags
+tag all                show all tags again
+tag MyTag OkHttp       show only these tags (bare names replace the selection)
+tag +MyTag -OkHttp     add / remove tags
+tag +"My Tag"          quote tags with spaces
+```
+
+Same selection as clicking tags in the filter panel; tags are case-sensitive.
+
+---
+
+## `search`
+
+```
+search <text>            tags whose name contains <text>
+search -m <text>         messages containing <text> — one row per distinct tag: "tag: message"
+search -app <text>       PIDs that log a tag containing <text>
+search -app -m <text>    PIDs that log a message containing <text>
+```
+
+- Case-insensitive substring search over the **whole loaded log** (not only the shown entries);
+  the text may contain spaces (`search -m connection timed out`).
+- Results open in a checkbox dialog, most matches first (up to 1000 rows), with the match count:
+  - tags: `NetworkMonitor  (12)`
+  - `-m`: `OkHttp: <-- HTTP FAILED: java.net.SocketTimeoutException …  (7)` — the first matching
+    message of that tag;
+  - `-app`: `pid 4321  com.example.app  tags: OkHttp, Net  (9)` or, with `-m`,
+    `pid 4321  com.example.app  OkHttp: <first matching message>  (9)`.
+- Rows already in the filter are pre-ticked. Applying (`Ctrl+S`) adds ticked tags / PIDs to the
+  filter and removes unticked ones; `Esc` changes nothing. The output shows the new selection.
+- The search runs in the background, so it does not block live logging.
 
 ---
 

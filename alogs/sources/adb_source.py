@@ -11,6 +11,7 @@ import subprocess
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 # Preferred format first; the plain one is the fallback for devices whose
@@ -180,15 +181,27 @@ def process_list(adb: list[str], serial: str) -> str:
     return ""
 
 
+def default_save_path(now: datetime | None = None) -> Path:
+    """`adblog-YYYY-MM-DD-HHMMSS.log` in the current directory."""
+    return Path(f"adblog-{(now or datetime.now()):%Y-%m-%d-%H%M%S}.log")
+
+
 class AdbSource:
     """Streams `adb logcat` lines. `iter_lines()` yields None after IDLE_SECONDS
-    without output, so the consumer can flush the held-back entry."""
+    without output, so the consumer can flush the held-back entry.
+
+    With `save_path`, every line received is also written to that file
+    (as received, UTF-8, LF line endings), flushed whenever the stream goes quiet.
+    """
 
     is_live = True
 
-    def __init__(self, adb: list[str], serial: str) -> None:
+    def __init__(self, adb: list[str], serial: str, save_path: Path | None = None) -> None:
         self.adb = adb
         self.serial = serial
+        self.save_path = save_path
+        self.save_error = ""
+        self.saved_lines = 0
         self.returncode: int | None = None
         self.error = ""
         self._process: subprocess.Popen[bytes] | None = None
@@ -208,6 +221,27 @@ class AdbSource:
                 pass
 
     def iter_lines(self) -> Iterator[str | None]:
+        save = None
+        if self.save_path is not None:
+            try:
+                save = self.save_path.open("w", encoding="utf-8", newline="\n")
+            except OSError as e:
+                self.save_error = f"cannot save to {self.save_path}: {e.strerror or e}"
+        try:
+            for line in self._attempts():
+                if save is not None:
+                    if line is None:
+                        save.flush()
+                    else:
+                        save.write(line)
+                        save.write("\n")
+                        self.saved_lines += 1
+                yield line
+        finally:
+            if save is not None:
+                save.close()
+
+    def _attempts(self) -> Iterator[str | None]:
         for i, fmt in enumerate(LOGCAT_FORMATS):
             last_attempt = i == len(LOGCAT_FORMATS) - 1
             produced = False

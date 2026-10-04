@@ -8,7 +8,8 @@ line plus a clickable filter panel.
 > Status: **milestones M1–M4 done** — parsing core (all logcat / Android Studio formats with
 > auto-detection), file viewing, level/tag/app filtering with a clickable filter panel, live
 > `adb logcat` with follow mode, local packaging (wheel + single-file binaries).
-> Commands: `help` / `open` / `openadb` / `export` / `format` / `levels` / `app` / `exit`.
+> Commands: `help` / `open` / `openadb` / `export` / `format` / `levels` / `tag` / `app` /
+> `search` / `exit`.
 
 ## Installation (local, no package index)
 
@@ -46,9 +47,21 @@ on start (about 1 s).
 ```sh
 alogs                     # empty screen, then type commands (`help`)
 alogs path/to/log.txt     # open a file
-alogs --adb               # live from the connected device
+alogs --adb               # live from the device, saved to adblog-YYYY-MM-DD-HHMMSS.log
+alogs --adb --serial R58M --no-save
 alogs --format brief x.log
+
+# start with filters (same as the levels / tag / app commands; options repeatable)
+alogs crash.log --levels W,E --tag AndroidRuntime --tag "My Tag" --app com.example.app --pid 1234
+alogs --adb --levels=-D,-V      # values starting with '-' need '='
 ```
+
+When you quit, alogs prints the command line that reopens the same file/device with the
+current filters.
+
+Inside the app, `search` finds tags (`search net`), messages (`search -m timeout`) or the PIDs
+logging them (`search -app -m FATAL`) and lets you tick results into the filter. `help` lists
+all commands.
 
 `adb` is found on PATH, else via `sdk.dir` in `local.properties` (current folder or a parent,
 as in an Android Studio project), else `ANDROID_HOME` / `ANDROID_SDK_ROOT`, else the default SDK
